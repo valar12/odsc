@@ -18,6 +18,7 @@
 * [Desired-state plan files](#desired-state-plan-files)
 * [Reporting and audit output](#reporting-and-audit-output)
 * [Advanced Graph operations](#advanced-graph-operations)
+* [Troubleshooting](#troubleshooting)
 * [Licensing](#licensing)
 
 ----------
@@ -540,6 +541,10 @@ $BatchParameters = @{
 
 Invoke-odscexGraphBatch @BatchParameters
 ```
+
+## Troubleshooting
+
+For admin-focused guidance on common setup and runtime issues, see [Troubleshooting](docs/troubleshooting.md). It covers authentication failures, permission errors, missing OneDrive provisioning, shortcut target resolution, relative path behavior, throttling, reporting, and national cloud endpoint checks.
 
 ## Licensing
 
