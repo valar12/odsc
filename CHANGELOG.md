@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.6.4
+
+* Added regression coverage for OneDrive root shortcut creation, RelativePath shortcut creation and removal, idempotent RelativePath reruns, and ConflictAction behavior inside RelativePath folders.
+
 ## 0.6.3
 
 * Recovered SharePoint list item unique IDs for folder targets when Graph omits `driveItem.sharepointIds`, avoiding drive-item-reference shortcuts that Graph rejects during OneDrive subfolder placement.
