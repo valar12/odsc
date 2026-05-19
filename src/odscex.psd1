@@ -1,6 +1,6 @@
 @{
     RootModule = 'odscex.psm1'
-    ModuleVersion = '0.6.3'
+    ModuleVersion = '0.6.4'
     CompatiblePSEditions = @('Core', 'Desktop')
     PowerShellVersion = '5.1'
     RequiredModules = @('MSAL.PS')
