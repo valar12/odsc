@@ -8,6 +8,9 @@ function Move-odscexDriveItemWithRetry {
         [string] $DestinationFolderId,
 
         [Parameter(Mandatory = $false)]
+        [string] $DestinationDriveId,
+
+        [Parameter(Mandatory = $false)]
         [string] $RelativePath,
 
         [Parameter(Mandatory = $false)]
@@ -18,13 +21,19 @@ function Move-odscexDriveItemWithRetry {
         [int] $MaxRetryCount = 5
     )
 
+    $ParentReference = @{
+        id = $DestinationFolderId
+    }
+
+    if ($DestinationDriveId) {
+        $ParentReference.driveId = $DestinationDriveId
+    }
+
     $MoveRequest = @{
         Resource = $Resource
         Method = [Microsoft.PowerShell.Commands.WebRequestMethod]::Patch
         Body = @{
-            parentReference = @{
-                id = $DestinationFolderId
-            }
+            parentReference = $ParentReference
         }
     }
 

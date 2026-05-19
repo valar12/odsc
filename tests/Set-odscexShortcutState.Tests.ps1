@@ -156,6 +156,7 @@ Describe 'Set-odscexShortcutState' {
             $MoveRequest.Resource | Should -Be 'drives/user-drive/items/temporary-shortcut'
             $MoveBody = $MoveRequest.Body | ConvertFrom-Json
             $MoveBody.parentReference.id | Should -Be 'destination-folder'
+            $MoveBody.parentReference.driveId | Should -Be 'user-drive'
             $MoveBody.PSObject.Properties.Name | Should -Not -Contain 'name'
         }
 
