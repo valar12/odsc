@@ -149,15 +149,31 @@ Describe 'Set-odscexShortcutState' {
 
         $PatchRequests = @($script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Patch })
         $PatchRequests | Should -HaveCount 4
-        $script:SleepSeconds.ToArray() | Should -Be @(2, 4)
+        $script:SleepSeconds.ToArray() | Should -Be @()
 
         $MoveRequests = @($PatchRequests | Select-Object -First 3)
         foreach ($MoveRequest in $MoveRequests) {
             $MoveRequest.Resource | Should -Be 'drives/user-drive/items/temporary-shortcut'
+        }
+
+        $MoveBody = $MoveRequests[0].Body | ConvertFrom-Json
+        $MoveBody.parentReference.id | Should -Be 'destination-folder'
+        $MoveBody.parentReference.driveId | Should -Be 'user-drive'
+        $MoveBody.name | Should -Be '2025-06-25'
+
+        $MoveBody = $MoveRequests[1].Body | ConvertFrom-Json
+        $MoveBody.parentReference.id | Should -Be 'destination-folder'
+        $MoveBody.PSObject.Properties.Name | Should -Not -Contain 'driveId'
+        $MoveBody.name | Should -Be '2025-06-25'
+
+        $MoveBody = $MoveRequests[2].Body | ConvertFrom-Json
+        $MoveBody.parentReference.path | Should -Be '/drive/root:/Shortcuts'
+        $MoveBody.parentReference.driveId | Should -Be 'user-drive'
+        $MoveBody.name | Should -Be '2025-06-25'
+
+        foreach ($MoveRequest in $MoveRequests) {
             $MoveBody = $MoveRequest.Body | ConvertFrom-Json
-            $MoveBody.parentReference.id | Should -Be 'destination-folder'
-            $MoveBody.parentReference.driveId | Should -Be 'user-drive'
-            $MoveBody.PSObject.Properties.Name | Should -Not -Contain 'name'
+            $MoveBody.PSObject.Properties.Name | Should -Contain 'parentReference'
         }
 
         $PatchRequests[3].Resource | Should -Be 'drives/user-drive/items/temporary-shortcut'

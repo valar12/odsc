@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.6.3
+
+* Expanded OneDrive subfolder shortcut fallback moves to try combined move/rename requests, destination path parent references, and user-scoped item resources when Graph rejects the initial drive-scoped move.
+
 ## 0.6.2
 
 * Fixed OneDrive subfolder shortcut placement by including the destination drive ID when moving fallback-created shortcuts.

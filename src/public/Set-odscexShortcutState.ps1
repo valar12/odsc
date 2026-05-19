@@ -211,17 +211,24 @@ function Set-odscexShortcutState {
 
             try {
                 if ($MoveShortcutToDestination) {
-                    $ShortcutResourceById = if ($DestinationDriveId) {
-                        Join-odscexDriveItemResource -DriveId $DestinationDriveId -ItemId $ShortcutResponse.id
-                    } else {
-                        Join-odscexDriveItemResource -User $User -ItemId $ShortcutResponse.id
+                    $ShortcutMoveResources = [System.Collections.Generic.List[string]]::new()
+                    if ($OneDriveDriveId) {
+                        $ShortcutMoveResources.Add((Join-odscexDriveItemResource -DriveId $OneDriveDriveId -ItemId $ShortcutResponse.id)) | Out-Null
                     }
 
+                    if ($DestinationDriveId -and ($DestinationDriveId -ne $OneDriveDriveId)) {
+                        $ShortcutMoveResources.Add((Join-odscexDriveItemResource -DriveId $DestinationDriveId -ItemId $ShortcutResponse.id)) | Out-Null
+                    }
+
+                    $ShortcutMoveResources.Add((Join-odscexDriveItemResource -User $User -ItemId $ShortcutResponse.id)) | Out-Null
+                    $ShortcutResourceById = $ShortcutMoveResources[0]
+
                     $ShortcutResponse = Move-odscexDriveItemWithRetry `
-                        -Resource $ShortcutResourceById `
+                        -Resource $ShortcutMoveResources.ToArray() `
                         -DestinationFolderId $DestinationFolder.id `
                         -DestinationDriveId $DestinationDriveId `
                         -RelativePath $RelativePath `
+                        -ShortcutName $ShortcutName `
                         -ItemId $ShortcutResponse.id
                 }
 
