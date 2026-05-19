@@ -217,7 +217,12 @@ function Set-odscexShortcutState {
                         Join-odscexDriveItemResource -User $User -ItemId $ShortcutResponse.id
                     }
 
-                    $ShortcutResponse = Move-odscexDriveItemWithRetry -Resource $ShortcutResourceById -DestinationFolderId $DestinationFolder.id -RelativePath $RelativePath -ItemId $ShortcutResponse.id
+                    $ShortcutResponse = Move-odscexDriveItemWithRetry `
+                        -Resource $ShortcutResourceById `
+                        -DestinationFolderId $DestinationFolder.id `
+                        -DestinationDriveId $DestinationDriveId `
+                        -RelativePath $RelativePath `
+                        -ItemId $ShortcutResponse.id
                 }
 
                 $ShortcutResourceById = if ($DestinationDriveId) {

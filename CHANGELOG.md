@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.6.2
+
+* Fixed OneDrive subfolder shortcut placement by including the destination drive ID when moving fallback-created shortcuts.
+
 ## 0.6.1
 
 * Added GitHub Actions CI to run the Pester test suite on push and pull request events.
