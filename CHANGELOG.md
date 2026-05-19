@@ -2,6 +2,7 @@
 
 ## 0.6.3
 
+* Recovered SharePoint list item unique IDs for folder targets when Graph omits `driveItem.sharepointIds`, avoiding drive-item-reference shortcuts that Graph rejects during OneDrive subfolder placement.
 * Expanded OneDrive subfolder shortcut fallback moves to try combined move/rename requests, destination path parent references, and user-scoped item resources when Graph rejects the initial drive-scoped move.
 
 ## 0.6.2

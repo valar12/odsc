@@ -90,6 +90,7 @@ function Move-odscexDriveItemWithRetry {
                 $MoveRequest = @{
                     Resource = $MoveResource
                     Method = [Microsoft.PowerShell.Commands.WebRequestMethod]::Patch
+                    DoNotUsePrefer = $true
                     Body = $MoveBody.Value
                 }
 
