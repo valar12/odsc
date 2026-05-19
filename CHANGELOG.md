@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.6.1
+
+* Added GitHub Actions CI to run the Pester test suite on push and pull request events.
+* Added GitHub Actions publishing logic that packages the module for PowerShell Gallery releases.
+
 ## 0.6.0
 
 * Refactored shortcut state handling into focused helpers for target matching, remote item references, drive item resources, fallback moves, and Graph error handling.
