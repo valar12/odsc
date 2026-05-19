@@ -11,8 +11,8 @@
     PrivateData = @{
         PSData = @{
             Tags = @('onedrive', 'sharepoint', 'shortcuts')
-            LicenseUri = 'https://github.com/innovara/odscex/blob/main/LICENSE.md'
-            ProjectUri = 'https://github.com/innovara/odscex'
+            LicenseUri = 'https://github.com/valar12/odscex/blob/main/LICENSE.md'
+            ProjectUri = 'https://github.com/valar12/odscex'
             ExternalModuleDependencies = @('MSAL.PS')
         }
     }
