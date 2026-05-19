@@ -177,6 +177,410 @@ Describe 'shortcut helper functions' {
 }
 
 Describe 'Set-odscexShortcutState' {
+    It 'creates a shortcut at the OneDrive root' {
+        $script:Requests = [System.Collections.Generic.List[object]]::new()
+
+        function Resolve-odscexShortcutTarget {
+            [pscustomobject]@{
+                DefaultShortcutName = '2025-06-25'
+                ItemUniqueId = 'unique'
+                DocumentLibraryId = 'list'
+                SiteId = 'site'
+                SiteUrl = 'https://contoso.sharepoint.com'
+                WebId = 'web'
+            }
+        }
+
+        function Resolve-odscexOneDriveRoot {
+            [pscustomobject]@{
+                id = 'root-item'
+                parentReference = [pscustomobject]@{ driveId = 'user-drive' }
+            }
+        }
+
+        function Invoke-odscexApiRequest {
+            param(
+                [string] $Resource,
+                [Microsoft.PowerShell.Commands.WebRequestMethod] $Method,
+                [object] $Body
+            )
+
+            $script:Requests.Add([pscustomobject]@{ Resource = $Resource; Method = $Method; Body = (ConvertTo-odscexJsonBody -Body $Body) }) | Out-Null
+
+            if ($Resource -eq 'users/user@contoso.com/drive/root:/2025-06-25' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Get) {
+                throw 'StatusCode: 404'
+            }
+
+            if ($Resource -eq 'drives/user-drive/items/root-item/children' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Post) {
+                return [pscustomobject]@{ id = 'created-root' }
+            }
+
+            if ($Resource -eq 'drives/user-drive/items/created-root' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Patch) {
+                return [pscustomobject]@{ id = 'created-root'; name = '2025-06-25' }
+            }
+        }
+
+        Set-odscexShortcutState -Uri 'https://contoso.sharepoint.com' -DocumentLibrary 'Documents' -FolderPath '2025-06-25' -UserPrincipalName 'user@contoso.com' -Confirm:$false | Out-Null
+
+        $PostRequests = @($script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Post })
+        $PostRequests | Should -HaveCount 1
+        $PostRequests[0].Resource | Should -Be 'drives/user-drive/items/root-item/children'
+        $CreateBody = $PostRequests[0].Body | ConvertFrom-Json
+        $CreateBody.name | Should -Be '2025-06-25'
+        $CreateBody.remoteItem.sharepointIds.listItemUniqueId | Should -Be 'unique'
+        $CreateBody.'@microsoft.graph.conflictBehavior' | Should -Be 'fail'
+
+        $PatchRequests = @($script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Patch })
+        $PatchRequests | Should -HaveCount 1
+        $PatchRequests[0].Resource | Should -Be 'drives/user-drive/items/created-root'
+        ($PatchRequests[0].Body | ConvertFrom-Json).name | Should -Be '2025-06-25'
+    }
+
+    It 'creates a shortcut directly in a RelativePath folder' {
+        $script:Requests = [System.Collections.Generic.List[object]]::new()
+
+        function Resolve-odscexShortcutTarget {
+            [pscustomobject]@{
+                DefaultShortcutName = '2025-06-25'
+                ItemUniqueId = 'unique'
+                DocumentLibraryId = 'list'
+                SiteId = 'site'
+                SiteUrl = 'https://contoso.sharepoint.com'
+                WebId = 'web'
+            }
+        }
+
+        function Resolve-odscexOneDriveRoot {
+            [pscustomobject]@{
+                id = 'root-item'
+                parentReference = [pscustomobject]@{ driveId = 'user-drive' }
+            }
+        }
+
+        function Resolve-odscexDriveFolderPath {
+            [pscustomobject]@{
+                id = 'destination-folder'
+                parentReference = [pscustomobject]@{ driveId = 'user-drive' }
+            }
+        }
+
+        function Invoke-odscexApiRequest {
+            param(
+                [string] $Resource,
+                [Microsoft.PowerShell.Commands.WebRequestMethod] $Method,
+                [object] $Body
+            )
+
+            $script:Requests.Add([pscustomobject]@{ Resource = $Resource; Method = $Method; Body = (ConvertTo-odscexJsonBody -Body $Body) }) | Out-Null
+
+            if ($Resource -eq 'users/user@contoso.com/drive/root:/Shortcuts/2025-06-25' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Get) {
+                throw 'StatusCode: 404'
+            }
+
+            if ($Resource -eq 'drives/user-drive/items/destination-folder/children' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Post) {
+                return [pscustomobject]@{ id = 'created-in-folder' }
+            }
+
+            if ($Resource -eq 'drives/user-drive/items/created-in-folder' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Patch) {
+                return [pscustomobject]@{ id = 'created-in-folder'; name = '2025-06-25' }
+            }
+        }
+
+        Set-odscexShortcutState -Uri 'https://contoso.sharepoint.com' -DocumentLibrary 'Documents' -FolderPath '2025-06-25' -RelativePath 'Shortcuts' -UserPrincipalName 'user@contoso.com' -Confirm:$false | Out-Null
+
+        $PostResources = @($script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Post } | Select-Object -ExpandProperty Resource)
+        $PostResources | Should -Be @('drives/user-drive/items/destination-folder/children')
+
+        $CreateBody = ($script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Post } | Select-Object -First 1).Body | ConvertFrom-Json
+        $CreateBody.name | Should -Be '2025-06-25'
+        $CreateBody.remoteItem.sharepointIds.listItemUniqueId | Should -Be 'unique'
+
+        $PatchRequests = @($script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Patch })
+        $PatchRequests | Should -HaveCount 1
+        $PatchRequests[0].Resource | Should -Be 'drives/user-drive/items/created-in-folder'
+    }
+
+    It 'treats an existing matching RelativePath shortcut as compliant' {
+        $script:Requests = [System.Collections.Generic.List[object]]::new()
+
+        function Resolve-odscexShortcutTarget {
+            [pscustomobject]@{
+                DefaultShortcutName = '2025-06-25'
+                ItemUniqueId = 'unique'
+                DocumentLibraryId = 'list'
+                SiteId = 'site'
+                SiteUrl = 'https://contoso.sharepoint.com'
+                WebId = 'web'
+            }
+        }
+
+        function Invoke-odscexApiRequest {
+            param(
+                [string] $Resource,
+                [Microsoft.PowerShell.Commands.WebRequestMethod] $Method,
+                [object] $Body
+            )
+
+            $script:Requests.Add([pscustomobject]@{ Resource = $Resource; Method = $Method; Body = (ConvertTo-odscexJsonBody -Body $Body) }) | Out-Null
+
+            if ($Resource -eq 'users/user@contoso.com/drive/root:/Shortcuts/2025-06-25' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Get) {
+                return [pscustomobject]@{
+                    id = 'existing-shortcut'
+                    remoteItem = [pscustomobject]@{
+                        sharepointIds = [pscustomobject]@{
+                            listId = 'list'
+                            listItemUniqueId = 'unique'
+                            siteId = 'site'
+                            webId = 'web'
+                        }
+                    }
+                }
+            }
+        }
+
+        $Result = Set-odscexShortcutState -Uri 'https://contoso.sharepoint.com' -DocumentLibrary 'Documents' -FolderPath '2025-06-25' -RelativePath 'Shortcuts' -UserPrincipalName 'user@contoso.com' -Confirm:$false
+
+        $Result.Status | Should -Be 'Compliant'
+        $Result.Action | Should -Be 'None'
+        @($script:Requests | Where-Object { $_.Method -ne [Microsoft.PowerShell.Commands.WebRequestMethod]::Get }) | Should -HaveCount 0
+    }
+
+    It 'skips conflicting existing shortcuts inside RelativePath when ConflictAction is Skip' {
+        $script:Requests = [System.Collections.Generic.List[object]]::new()
+
+        function Resolve-odscexShortcutTarget {
+            [pscustomobject]@{
+                DefaultShortcutName = '2025-06-25'
+                ItemUniqueId = 'unique'
+                DocumentLibraryId = 'list'
+                SiteId = 'site'
+                SiteUrl = 'https://contoso.sharepoint.com'
+                WebId = 'web'
+            }
+        }
+
+        function Invoke-odscexApiRequest {
+            param(
+                [string] $Resource,
+                [Microsoft.PowerShell.Commands.WebRequestMethod] $Method,
+                [object] $Body
+            )
+
+            $script:Requests.Add([pscustomobject]@{ Resource = $Resource; Method = $Method; Body = (ConvertTo-odscexJsonBody -Body $Body) }) | Out-Null
+
+            if ($Resource -eq 'users/user@contoso.com/drive/root:/Shortcuts/2025-06-25' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Get) {
+                return [pscustomobject]@{
+                    id = 'conflicting-shortcut'
+                    remoteItem = [pscustomobject]@{
+                        sharepointIds = [pscustomobject]@{
+                            listId = 'other-list'
+                            listItemUniqueId = 'other-unique'
+                            siteId = 'other-site'
+                            webId = 'other-web'
+                        }
+                    }
+                }
+            }
+        }
+
+        $Result = Set-odscexShortcutState -Uri 'https://contoso.sharepoint.com' -DocumentLibrary 'Documents' -FolderPath '2025-06-25' -RelativePath 'Shortcuts' -UserPrincipalName 'user@contoso.com' -ConflictAction Skip -Confirm:$false
+
+        $Result.Status | Should -Be 'SkippedConflict'
+        @($script:Requests | Where-Object { $_.Method -ne [Microsoft.PowerShell.Commands.WebRequestMethod]::Get }) | Should -HaveCount 0
+    }
+
+    It 'throws for conflicting existing shortcuts inside RelativePath when ConflictAction is Error' {
+        $script:Requests = [System.Collections.Generic.List[object]]::new()
+
+        function Resolve-odscexShortcutTarget {
+            [pscustomobject]@{
+                DefaultShortcutName = '2025-06-25'
+                ItemUniqueId = 'unique'
+                DocumentLibraryId = 'list'
+                SiteId = 'site'
+                SiteUrl = 'https://contoso.sharepoint.com'
+                WebId = 'web'
+            }
+        }
+
+        function Invoke-odscexApiRequest {
+            param(
+                [string] $Resource,
+                [Microsoft.PowerShell.Commands.WebRequestMethod] $Method,
+                [object] $Body
+            )
+
+            $script:Requests.Add([pscustomobject]@{ Resource = $Resource; Method = $Method; Body = (ConvertTo-odscexJsonBody -Body $Body) }) | Out-Null
+
+            if ($Resource -eq 'users/user@contoso.com/drive/root:/Shortcuts/2025-06-25' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Get) {
+                return [pscustomobject]@{
+                    id = 'conflicting-shortcut'
+                    remoteItem = [pscustomobject]@{
+                        sharepointIds = [pscustomobject]@{
+                            listId = 'other-list'
+                            listItemUniqueId = 'other-unique'
+                            siteId = 'other-site'
+                            webId = 'other-web'
+                        }
+                    }
+                }
+            }
+        }
+
+        {
+            Set-odscexShortcutState -Uri 'https://contoso.sharepoint.com' -DocumentLibrary 'Documents' -FolderPath '2025-06-25' -RelativePath 'Shortcuts' -UserPrincipalName 'user@contoso.com' -ConflictAction Error -Confirm:$false -ErrorAction Stop
+        } | Should -Throw "An item named '2025-06-25' already exists for 'user@contoso.com' and does not match the requested target."
+
+        @($script:Requests | Where-Object { $_.Method -ne [Microsoft.PowerShell.Commands.WebRequestMethod]::Get }) | Should -HaveCount 0
+    }
+
+    It 'replaces conflicting existing shortcuts inside RelativePath when ConflictAction is Replace' {
+        $script:Requests = [System.Collections.Generic.List[object]]::new()
+
+        function Resolve-odscexShortcutTarget {
+            [pscustomobject]@{
+                DefaultShortcutName = '2025-06-25'
+                ItemUniqueId = 'unique'
+                DocumentLibraryId = 'list'
+                SiteId = 'site'
+                SiteUrl = 'https://contoso.sharepoint.com'
+                WebId = 'web'
+            }
+        }
+
+        function Resolve-odscexOneDriveRoot {
+            [pscustomobject]@{
+                id = 'root-item'
+                parentReference = [pscustomobject]@{ driveId = 'user-drive' }
+            }
+        }
+
+        function Resolve-odscexDriveFolderPath {
+            [pscustomobject]@{
+                id = 'destination-folder'
+                parentReference = [pscustomobject]@{ driveId = 'user-drive' }
+            }
+        }
+
+        function Invoke-odscexApiRequest {
+            param(
+                [string] $Resource,
+                [Microsoft.PowerShell.Commands.WebRequestMethod] $Method,
+                [object] $Body
+            )
+
+            $script:Requests.Add([pscustomobject]@{ Resource = $Resource; Method = $Method; Body = (ConvertTo-odscexJsonBody -Body $Body) }) | Out-Null
+
+            if ($Resource -eq 'users/user@contoso.com/drive/root:/Shortcuts/2025-06-25' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Get) {
+                return [pscustomobject]@{
+                    id = 'conflicting-shortcut'
+                    remoteItem = [pscustomobject]@{
+                        sharepointIds = [pscustomobject]@{
+                            listId = 'other-list'
+                            listItemUniqueId = 'other-unique'
+                            siteId = 'other-site'
+                            webId = 'other-web'
+                        }
+                    }
+                }
+            }
+
+            if ($Resource -eq 'users/user@contoso.com/drive/root:/Shortcuts/2025-06-25' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Delete) {
+                return $null
+            }
+
+            if ($Resource -eq 'drives/user-drive/items/destination-folder/children' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Post) {
+                return [pscustomobject]@{ id = 'replacement-shortcut' }
+            }
+
+            if ($Resource -eq 'drives/user-drive/items/replacement-shortcut' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Patch) {
+                return [pscustomobject]@{ id = 'replacement-shortcut'; name = '2025-06-25' }
+            }
+        }
+
+        Set-odscexShortcutState -Uri 'https://contoso.sharepoint.com' -DocumentLibrary 'Documents' -FolderPath '2025-06-25' -RelativePath 'Shortcuts' -UserPrincipalName 'user@contoso.com' -ConflictAction Replace -Confirm:$false | Out-Null
+
+        $DeleteRequests = @($script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Delete })
+        $DeleteRequests | Should -HaveCount 1
+        $DeleteRequests[0].Resource | Should -Be 'users/user@contoso.com/drive/root:/Shortcuts/2025-06-25'
+
+        $PostRequests = @($script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Post })
+        $PostRequests | Should -HaveCount 1
+        $PostRequests[0].Resource | Should -Be 'drives/user-drive/items/destination-folder/children'
+        ($PostRequests[0].Body | ConvertFrom-Json).name | Should -Be '2025-06-25'
+    }
+
+    It 'renames new conflicting shortcuts inside RelativePath when ConflictAction is Rename' {
+        $script:Requests = [System.Collections.Generic.List[object]]::new()
+
+        function Resolve-odscexShortcutTarget {
+            [pscustomobject]@{
+                DefaultShortcutName = '2025-06-25'
+                ItemUniqueId = 'unique'
+                DocumentLibraryId = 'list'
+                SiteId = 'site'
+                SiteUrl = 'https://contoso.sharepoint.com'
+                WebId = 'web'
+            }
+        }
+
+        function Resolve-odscexOneDriveRoot {
+            [pscustomobject]@{
+                id = 'root-item'
+                parentReference = [pscustomobject]@{ driveId = 'user-drive' }
+            }
+        }
+
+        function Resolve-odscexDriveFolderPath {
+            [pscustomobject]@{
+                id = 'destination-folder'
+                parentReference = [pscustomobject]@{ driveId = 'user-drive' }
+            }
+        }
+
+        function Invoke-odscexApiRequest {
+            param(
+                [string] $Resource,
+                [Microsoft.PowerShell.Commands.WebRequestMethod] $Method,
+                [object] $Body
+            )
+
+            $script:Requests.Add([pscustomobject]@{ Resource = $Resource; Method = $Method; Body = (ConvertTo-odscexJsonBody -Body $Body) }) | Out-Null
+
+            if ($Resource -eq 'users/user@contoso.com/drive/root:/Shortcuts/2025-06-25' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Get) {
+                return [pscustomobject]@{
+                    id = 'conflicting-shortcut'
+                    remoteItem = [pscustomobject]@{
+                        sharepointIds = [pscustomobject]@{
+                            listId = 'other-list'
+                            listItemUniqueId = 'other-unique'
+                            siteId = 'other-site'
+                            webId = 'other-web'
+                        }
+                    }
+                }
+            }
+
+            if ($Resource -eq 'drives/user-drive/items/destination-folder/children' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Post) {
+                return [pscustomobject]@{ id = 'renamed-shortcut' }
+            }
+
+            if ($Resource -eq 'drives/user-drive/items/renamed-shortcut' -and $Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Patch) {
+                return [pscustomobject]@{ id = 'renamed-shortcut'; name = ((ConvertTo-odscexJsonBody -Body $Body | ConvertFrom-Json).name) }
+            }
+        }
+
+        Set-odscexShortcutState -Uri 'https://contoso.sharepoint.com' -DocumentLibrary 'Documents' -FolderPath '2025-06-25' -RelativePath 'Shortcuts' -UserPrincipalName 'user@contoso.com' -ConflictAction Rename -Confirm:$false | Out-Null
+
+        @($script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Delete }) | Should -HaveCount 0
+
+        $PostRequest = $script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Post } | Select-Object -First 1
+        $PostRequest.Resource | Should -Be 'drives/user-drive/items/destination-folder/children'
+        $CreateBody = $PostRequest.Body | ConvertFrom-Json
+        $CreateBody.name | Should -BeLike '2025-06-25-*'
+        $CreateBody.'@microsoft.graph.conflictBehavior' | Should -Be 'rename'
+    }
+
     It 'retries moving a fallback-created shortcut before renaming when Graph rejects direct and path nested creation' {
         $script:Requests = [System.Collections.Generic.List[object]]::new()
         $script:MovePatchAttempts = 0
