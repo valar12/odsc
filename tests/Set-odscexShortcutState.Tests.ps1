@@ -6,6 +6,7 @@ BeforeAll {
     . "$PSScriptRoot/../src/private/Join-odscexDrivePathChildrenResource.ps1"
     . "$PSScriptRoot/../src/private/ConvertTo-odscexGraphDrivePath.ps1"
     . "$PSScriptRoot/../src/private/New-odscexRemoteItemReference.ps1"
+    . "$PSScriptRoot/../src/private/Resolve-odscexShortcutTarget.ps1"
     . "$PSScriptRoot/../src/private/Test-odscexShortcutTargetMatch.ps1"
     . "$PSScriptRoot/../src/private/Move-odscexDriveItemWithRetry.ps1"
     . "$PSScriptRoot/../src/private/Write-odscexResult.ps1"
@@ -71,6 +72,107 @@ Describe 'shortcut helper functions' {
         })
         $DriveRemoteItem.id | Should -Be 'item'
         $DriveRemoteItem.parentReference.driveId | Should -Be 'drive'
+    }
+
+    It 'recovers a folder list item unique id from the drive item listItem relationship' {
+        function Resolve-odscexSharePointSite {
+            [pscustomobject]@{
+                SiteIdRaw = 'contoso.sharepoint.com,site-id,web-id'
+                SiteId = 'site-id'
+                WebId = 'web-id'
+            }
+        }
+
+        function Resolve-odscexDocumentLibrary {
+            [pscustomobject]@{
+                id = 'list-id'
+                name = 'Documents'
+                displayName = 'Documents'
+            }
+        }
+
+        function Resolve-odscexDocumentLibraryFolder {
+            [pscustomobject]@{
+                Drive = [pscustomobject]@{ id = 'target-drive' }
+                Item = [pscustomobject]@{
+                    id = 'target-item'
+                    name = '2025-06-25'
+                    webUrl = 'https://contoso.sharepoint.com/Documents/2025-06-25'
+                }
+            }
+        }
+
+        function Invoke-odscexApiRequest {
+            param(
+                [string] $Resource,
+                [Microsoft.PowerShell.Commands.WebRequestMethod] $Method,
+                [switch] $DoNotUsePrefer
+            )
+
+            if ($Resource -eq 'drives/target-drive/items/target-item/listItem') {
+                return [pscustomobject]@{ eTag = '"12345678-1234-1234-1234-123456789abc,1"' }
+            }
+
+            throw "Unexpected resource $Resource"
+        }
+
+        $Target = Resolve-odscexShortcutTarget -Uri 'https://contoso.sharepoint.com' -DocumentLibrary 'Documents' -FolderPath '2025-06-25'
+
+        $Target.ItemUniqueId | Should -Be '12345678-1234-1234-1234-123456789abc'
+        $Target.DefaultShortcutName | Should -Be '2025-06-25'
+    }
+
+    It 'falls back to a document library list item lookup when the drive item listItem relationship is unavailable' {
+        function Resolve-odscexSharePointSite {
+            [pscustomobject]@{
+                SiteIdRaw = 'contoso.sharepoint.com,site-id,web-id'
+                SiteId = 'site-id'
+                WebId = 'web-id'
+            }
+        }
+
+        function Resolve-odscexDocumentLibrary {
+            [pscustomobject]@{
+                id = 'list-id'
+                name = 'Documents'
+                displayName = 'Documents'
+            }
+        }
+
+        function Resolve-odscexDocumentLibraryFolder {
+            [pscustomobject]@{
+                Drive = [pscustomobject]@{ id = 'target-drive' }
+                Item = [pscustomobject]@{
+                    id = 'target-item'
+                    name = '2025-06-25'
+                    webUrl = 'https://contoso.sharepoint.com/Documents/2025-06-25'
+                }
+            }
+        }
+
+        function Invoke-odscexApiRequest {
+            param(
+                [string] $Resource,
+                [Microsoft.PowerShell.Commands.WebRequestMethod] $Method,
+                [switch] $DoNotUsePrefer,
+                [switch] $AllPages
+            )
+
+            if ($Resource -eq 'drives/target-drive/items/target-item/listItem') {
+                throw 'StatusCode: 404'
+            }
+
+            if ($Resource -like "sites/contoso.sharepoint.com,site-id,web-id/lists/list-id/items?*") {
+                return @([pscustomobject]@{ eTag = '"abcdefab-1234-5678-9abc-abcdefabcdef,2"' })
+            }
+
+            throw "Unexpected resource $Resource"
+        }
+
+        $Target = Resolve-odscexShortcutTarget -Uri 'https://contoso.sharepoint.com' -DocumentLibrary 'Documents' -FolderPath '2025-06-25'
+
+        $Target.ItemUniqueId | Should -Be 'abcdefab-1234-5678-9abc-abcdefabcdef'
+        $Target.DefaultShortcutName | Should -Be '2025-06-25'
     }
 }
 
@@ -149,15 +251,31 @@ Describe 'Set-odscexShortcutState' {
 
         $PatchRequests = @($script:Requests | Where-Object { $_.Method -eq [Microsoft.PowerShell.Commands.WebRequestMethod]::Patch })
         $PatchRequests | Should -HaveCount 4
-        $script:SleepSeconds.ToArray() | Should -Be @(2, 4)
+        $script:SleepSeconds.ToArray() | Should -Be @()
 
         $MoveRequests = @($PatchRequests | Select-Object -First 3)
         foreach ($MoveRequest in $MoveRequests) {
             $MoveRequest.Resource | Should -Be 'drives/user-drive/items/temporary-shortcut'
+        }
+
+        $MoveBody = $MoveRequests[0].Body | ConvertFrom-Json
+        $MoveBody.parentReference.id | Should -Be 'destination-folder'
+        $MoveBody.parentReference.driveId | Should -Be 'user-drive'
+        $MoveBody.name | Should -Be '2025-06-25'
+
+        $MoveBody = $MoveRequests[1].Body | ConvertFrom-Json
+        $MoveBody.parentReference.id | Should -Be 'destination-folder'
+        $MoveBody.PSObject.Properties.Name | Should -Not -Contain 'driveId'
+        $MoveBody.name | Should -Be '2025-06-25'
+
+        $MoveBody = $MoveRequests[2].Body | ConvertFrom-Json
+        $MoveBody.parentReference.path | Should -Be '/drive/root:/Shortcuts'
+        $MoveBody.parentReference.driveId | Should -Be 'user-drive'
+        $MoveBody.name | Should -Be '2025-06-25'
+
+        foreach ($MoveRequest in $MoveRequests) {
             $MoveBody = $MoveRequest.Body | ConvertFrom-Json
-            $MoveBody.parentReference.id | Should -Be 'destination-folder'
-            $MoveBody.parentReference.driveId | Should -Be 'user-drive'
-            $MoveBody.PSObject.Properties.Name | Should -Not -Contain 'name'
+            $MoveBody.PSObject.Properties.Name | Should -Contain 'parentReference'
         }
 
         $PatchRequests[3].Resource | Should -Be 'drives/user-drive/items/temporary-shortcut'
